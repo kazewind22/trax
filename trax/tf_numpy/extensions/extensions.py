@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import bisect
 import contextlib
+import functools
 import string
 import sys
 import threading
@@ -411,14 +412,26 @@ def eval_on_shapes(f, static_argnums=()):
   return f_return
 
 
-def index_update(x, idx, y):
+def _index_update_helper(updater, x, idx, y):
   x = tf_np.asarray(x)
-  # TODO(b/164251540): Remove these two lines once
-  #   tf.tensor_strided_slice_update and tf.tensor_scatter_nd_update support
-  #   broadcasting.
-  y = tf_np.asarray(y, x.dtype)
+  y = tf_np.asarray(y)
+  # TODO(b/164251540): Remove this expensive manual broadcasting once
+  #   tf.raw_ops.tensor_strided_slice_update and tf.tensor_scatter_nd_update
+  #   support broadcasting.
   y = tf.broadcast_to(y.data, tf.shape(x[idx].data))
-  return x._with_update(idx, y)  # pylint: disable=protected-access
+  return updater(x, idx, y)
+
+
+# pylint: disable=protected-access
+index_update = functools.partial(
+    _index_update_helper, tf_np.ndarray._with_index_update)
+index_add = functools.partial(
+    _index_update_helper, tf_np.ndarray._with_index_add)
+index_min = functools.partial(
+    _index_update_helper, tf_np.ndarray._with_index_min)
+index_max = functools.partial(
+    _index_update_helper, tf_np.ndarray._with_index_max)
+# pylint: enable=protected-access
 
 
 def logsumexp(x, axis=None, keepdims=None):
